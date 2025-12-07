@@ -7,15 +7,44 @@ import joblib
 # --- 1. SETUP ---
 st.set_page_config(page_title="Cell Traffic Controller", page_icon="🧬")
 
-# Load Model
-try:
-    #_SW for swissprot (reviewed)
-    #_TR for tremble (more data)
-    model = joblib.load('cell_traffic_model_SW.pkl')
-    feature_names = joblib.load('model_features_SW.pkl')
-except FileNotFoundError:
-    st.error("🚨 Model files not found! Run the notebook first to generate .pkl files.")
-    st.stop()
+# --- Model selection (SW vs TR) ---
+# Allow switching model variant from the web UI. Options can be extended later.
+with st.sidebar:
+    st.subheader("Model Variant")
+    variant = st.selectbox("Choose model artifact suffix:", options=["SW", "TR"], index=0)
+
+# Build expected filenames based on variant
+model_path = f'cell_traffic_model_{variant}.pkl'
+features_path = f'model_features_{variant}.pkl'
+
+def _try_load_paths(primary_model, primary_features):
+    try:
+        m = joblib.load(primary_model)
+        fn = joblib.load(primary_features)
+        return m, fn, primary_model, primary_features
+    except FileNotFoundError:
+        return None
+
+# Try the selected-suffixed pair first
+loaded = _try_load_paths(model_path, features_path)
+
+if loaded is None:
+    # Fallback: try the unsuffixed filenames produced by the notebook
+    fallback = _try_load_paths('cell_traffic_model.pkl', 'model_features.pkl')
+    if fallback is not None:
+        model, feature_names, used_model_path, used_features_path = fallback
+        st.warning(f"Using unsuffixed artifacts (`{used_model_path}`, `{used_features_path}`) as fallback. Consider renaming to include suffix '{variant}' for clarity.")
+    else:
+        st.error("🚨 Model files not found! Run the notebook first to generate .pkl files, or copy/rename the generated files to match the chosen variant.")
+        st.info("Example PowerShell commands to create SW copies:\ncopy .\\cell_traffic_model.pkl .\\cell_traffic_model_SW.pkl\ncopy .\\model_features.pkl .\\model_features_SW.pkl")
+        st.stop()
+else:
+    model, feature_names, used_model_path, used_features_path = loaded
+
+# For debugging / visibility show which files were loaded
+with st.sidebar:
+    st.caption(f"Loaded model: {used_model_path}")
+    st.caption(f"Loaded features: {used_features_path}")
 
 # --- 2. LOGIC (Must match Notebook exactly) ---
 hydro_scale = {
